@@ -55,24 +55,107 @@ These are the places where the framing will get challenged. Build them in from d
 
 ---
 
-## 5. Build order
+## 5. Team and ownership
 
-Each step is a thin end-to-end slice that the next one depends on.
+| Owner | Problems | Owns in code |
+|---|---|---|
+| **Vibhas** | 2 (provenance tags) + 5 (session combination) | `src/agentshield/provenance/` (labelers), `src/agentshield/policies/session.py` |
+| **Sahil** | 3 (destructive actions) + 4 (data leaving) | `src/agentshield/policies/tools.py`, `src/agentshield/policies/egress.py` |
+| **Bhoomi** | 1 (nasty input) + 6 (audit) + shared core and integration | `model.py`, `kernel.py`, `audit.py`, `src/agentshield/input/`, `src/agentshield/adapters/`, `demo/` |
 
-| Step | Problem | Deliverable | Done when | Status |
-|---|---|---|---|---|
-| 1 | 6 | Core types (`Event`, `Label`, `Decision`, `Mode`) + hash-chained audit log + signed checkpoints | Editing, deleting or reordering any log line is detected by `verify()`; checkpoint signatures verify with the public key only | **Done** — `src/agentshield/`, 15 tests |
-| 2 | 3 | Tool-call interception, per-tool capability manifest, SQL classification via `sqlglot` | `DROP TABLE`, multi-statement and unparseable SQL are denied; `SELECT` passes; shadow mode logs "would have blocked" | |
-| 3 | 2 | Labels attached at every entry point (tool results, documents, memory reads, MCP tool descriptions) | Every event in the log carries the labels of the content that produced it | |
-| 4 | 5 | Per-session tally + human-approval pause | **Flagship demo:** resume → salaries → external email pauses for approval; any two of the three pass | |
-| 5 | 4 | Egress check using labels + Presidio + destination allowlist | Tagged-confidential data to a non-allowlisted domain is stopped even when no PII regex matches | |
-| 6 | 1 | Plug-in slot for an external input classifier | Prompt Guard result appears as an advisory signal in the decision record | |
+Why this split: 2 and 5 are one mechanism (5 counts the tags 2 creates), so one owner. 3 and 4 both inspect a tool call before it fires. 1 is mostly integration and 6's core is done, which leaves room for the shared kernel and the agent hook that no single problem owns.
 
-Shadow mode is on from step 2. Latency (p50/p99) and false-positive rate are measured from step 4 against AgentDojo plus our own attack cases, and published.
+### The shared contract
+
+Everyone builds against these. Changes need review from all three.
+
+- **`model.py`** — `Label`, `Event`, `Decision`, `Action`, `Mode`, `Trust`, `Sensitivity`.
+- **`kernel.py`** — the two plug-in points and the session:
+  - `Labeler.label(event) -> Iterable[Label]` — Vibhas's tagging plugs in here.
+  - `Policy.evaluate(event, session) -> Decision | None` — every rule (Problems 1, 3, 4, 5) plugs in here.
+  - `Session.history` — every earlier `(event, decision)` in the conversation.
+- **`Shield.check(event)`** runs labelers → policies → combines votes (most severe wins) → applies shadow/enforce → records to the audit log.
+
+Rules for anything plugged in: return a `Decision` (or `None`), never raise to block, never set the mode, keep no state of your own (read it from `session.history` — that is what makes replay work). The kernel fails closed: a crashing policy votes `BLOCK`, a crashing labeler marks content untrusted.
 
 ---
 
-## 6. Open decisions
+## 6. Status (2026-10-03)
+
+| Area | Owner | Status |
+|---|---|---|
+| Shared types (`model.py`) | Bhoomi | **Done**, pending team review |
+| Kernel + plug-in interfaces (`kernel.py`) | Bhoomi | **Done**, pending team review |
+| Problem 6 — hash chain, signed checkpoints, `verify()` | Bhoomi | **Core done** |
+| Contract check — flagship scenario through toy labeler + toy trifecta policy | — | **Passing** (`tests/test_kernel.py`) |
+| Problem 1 | Bhoomi | Not started |
+| Problems 2, 5 | Vibhas | Not started |
+| Problems 3, 4 | Sahil | Not started |
+| Agent hook (MCP proxy / LangGraph) | Bhoomi | Not started — form factor undecided |
+
+22 tests passing. Code is on branch `foundation`, not yet merged.
+
+---
+
+## 7. Tracks
+
+Each person can start immediately: tests use hand-written `Label`s, so nobody waits on anyone else's code.
+
+### Vibhas — Problems 2 + 5 (critical path)
+
+| # | Task | Done when |
+|---|---|---|
+| V1 | Source-config labeler: map tool/source → `Trust` + `Sensitivity`; unknown sources default `UNTRUSTED` | Every `TOOL_RESULT`, `MEMORY_READ` and `AGENT_MESSAGE` event carries labels |
+| V2 | Session combination policy | Untrusted + sensitive + external action → `REQUIRE_APPROVAL`; any two of the three pass. Decide whether a blocked external action counts toward the tally. |
+| V3 | MCP tool-description labeler | Tool descriptions are labeled by server trust, so a poisoned description is untrusted content |
+| V4 | Argument matching | A tool-call argument containing text from an untrusted result is flagged — finer than whole-session tagging |
+
+Sahil's egress check (S4) and the flagship demo depend on V1 + V2, so these go first.
+
+### Sahil — Problems 3 + 4
+
+| # | Task | Done when |
+|---|---|---|
+| S1 | Tool capability manifest policy (per agent, per tool: allowed operations) | A call outside the manifest votes `BLOCK` |
+| S2 | SQL classification with `sqlglot` | `SELECT` passes; `DROP`/`DELETE`/`UPDATE` follow the manifest; multi-statement and **unparseable SQL vote `BLOCK`** |
+| S3 | Circuit breaker | Too many calls per turn or per session votes `TERMINATE` (counts read from `session.history`) |
+| S4 | Egress policy: destination allowlist + Presidio + labels | Data labeled `CONFIDENTIAL`/`SECRET` going to a non-allowlisted domain is stopped even when no PII pattern matches |
+
+### Bhoomi — Problems 1 + 6 + core
+
+| # | Task | Done when |
+|---|---|---|
+| B1 | Team review of the shared contract; freeze v0.1 | All three have approved `model.py` and `kernel.py` |
+| B2 | Agent hook (MCP proxy or LangGraph adapter) | Real tool calls and results become `Event`s; `enforced_action` is applied; `REQUIRE_APPROVAL` pauses for a human |
+| B3 | Problem 1: Prompt Guard / LLM Guard as an advisory policy | Classifier result appears in the decision reasons; votes `WARN` only |
+| B4 | Problem 6 remainder: checkpoint export to separate storage; replay CLI | A recorded session can be re-run through current policies and the decisions diffed |
+| B5 | Demo agent | Runs the flagship scenario and `DROP TABLE` end to end |
+
+### Milestone M1 — flagship demo
+
+Needs **V1, V2, S1, S2, B2, B5**. A real agent reads a malicious resume, reads salaries, and tries to email an outside address: the email pauses for approval, an internal email passes, `DROP TABLE` is blocked, and `verify()` passes on the audit log. Measure latency (p50/p99) and false positives from here on, against AgentDojo plus our own attack cases.
+
+---
+
+## 8. Working agreement
+
+- `main` only changes through pull requests. Branches: `vibhas/…`, `sahil/…`, `bhoomi/…`.
+- Every PR gets at least one review from another member; PRs touching the shared contract get both.
+- Every labeler and policy ships with tests. `pytest` must pass before merge.
+- Stay inside your own files where possible — the layout above is designed so three people rarely edit the same file.
+- Weekly 30-minute sync: show what merged, raise contract changes, update the status table above.
+
+Setup:
+
+```bash
+python -m venv .venv
+.venv/Scripts/python -m pip install -e ".[dev]"
+.venv/Scripts/python -m pytest -q
+```
+
+---
+
+## 9. Open decisions
 
 1. **First form factor.** Recommendation: core library behind an **MCP proxy** first (works on agents whose code we don't control — Claude Code, Cursor), thin LangGraph adapter second. Both sit on the same core.
 2. **Vertical.** Pick one (coding agents or finance-ops) and find 2–3 design partners there.
@@ -80,6 +163,6 @@ Shadow mode is on from step 2. Latency (p50/p99) and false-positive rate are mea
 
 ---
 
-## 7. Parallel track
+## 10. Parallel track
 
 Offer the two-week agent security assessment against OWASP ASI01–ASI10 while building. Every engagement produces attack cases for the replay suite and a draft policy pack.
