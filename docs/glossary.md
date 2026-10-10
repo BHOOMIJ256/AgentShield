@@ -6,6 +6,7 @@
 | **Adapter / hook** | The code that connects AgentShield to a real agent: turns its tool calls and results into `Event`s and applies decisions. MCP proxy or LangGraph adapter. |
 | **AgentDojo** | A public benchmark of prompt-injection attacks on tool-using agents. We will measure against it from M1. |
 | **ASI01–ASI10** | The OWASP Top 10 for Agentic Applications. Buyers use these IDs in security questionnaires. |
+| **Approver** | Whatever gets a yes/no from a human for a `REQUIRE_APPROVAL` decision. Must be a channel the agent can't reach — `FileApprover` + `agentshield-approve` today. |
 | **Audit log** | Our append-only, hash-chained record of every event and decision (`audit.py`). |
 | **Checkpoint** | A signed `(seq, hash)` of the log's latest entry. Stored separately, it proves the log wasn't truncated or rebuilt. |
 | **Combine** | The kernel's rule for merging policy votes: most severe wins. |
@@ -17,6 +18,7 @@
 | **Event** | One thing the agent did or received, as seen at an interception point. |
 | **Fail closed** | When something breaks, deny rather than allow. A crashing policy votes `BLOCK`. |
 | **Flagship demo** | Resume → salaries → external email, paused for approval. Milestone M1. |
+| **Gate (`ToolGate`)** | The adapter-independent part of an adapter: turns tool listings, calls and results into events and applies decisions. |
 | **Hash chain** | Each log entry includes the hash of the previous one, so changing any entry breaks every link after it. |
 | **Indirect prompt injection** | Instructions hidden in content the agent reads (a resume, web page, email) rather than typed by the user. Problem 2. |
 | **Label** | A provenance tag on content: origin, trust, sensitivity. |

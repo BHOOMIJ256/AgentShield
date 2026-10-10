@@ -80,6 +80,14 @@ Append-only. To reverse a decision, add a new entry that says which one it super
 **Why:** Policies must read events the same way no matter which adapter produced them.
 **Means:** The table in [Architecture](2-architecture.md#data-model--srcagentshieldmodelpy). `TOOL_CALL` payload is the tool's arguments verbatim; which argument holds a SQL query, recipient or URL is per-tool config inside each policy.
 
+### D20 · 2026-10-10 · Approvals travel outside the agent's channel
+**Why:** MCP elicitation sends the question back through the agent's own client, and the SDK documents that an agent client may answer it automatically — the agent could approve its own request. The human's answer must come through something the agent can't reach.
+**Means:** `Approver` interface. First implementation: `FileApprover` — requests written to a directory, answered with `agentshield-approve`; timeout means no. With no approver configured, `DenyAll`. Elicitation may be added later only as an explicitly opt-in, weaker approver.
+
+### D21 · 2026-10-10 · A tool whose description isn't allowed is hidden, and calls to it are refused
+**Why:** A poisoned description does its damage just by being read (component #10). Asking a human about a tool listing mid-session makes no sense, so anything at or above `REQUIRE_APPROVAL` hides the tool. An agent that already knows the tool's name is still refused.
+**Means:** `ToolGate.describe_tool` and `ToolGate.hidden`.
+
 ## Open questions
 
 | ID | Question | Owner | Blocks | Recommendation |

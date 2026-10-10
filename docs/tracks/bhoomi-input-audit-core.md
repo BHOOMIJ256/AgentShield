@@ -54,6 +54,8 @@ What it must do:
 | `BLOCK` | Return a tool error to the agent with the reasons |
 | `TERMINATE` | Return an error and `end_session` |
 
+**Built** on `bhoomi/mcp-proxy` — see [Architecture → Adapters](../2-architecture.md#adapters--srcagentshieldadapters) for how it works and how to run it. Approvals go through `FileApprover` + `agentshield-approve`, not MCP elicitation (D20). Still to do: the LangGraph adapter on the same `ToolGate` — it can see the user's message, which Problem 1 (B3) needs.
+
 The proxy never sees the user's message, so it emits no `USER_INPUT` events — Problem 1 (B3) needs an adapter that does, such as the LangGraph one.
 
 The LangGraph adapter comes second: wrap the tool node, and use LangGraph's `interrupt()` for approval.
