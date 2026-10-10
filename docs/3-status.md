@@ -1,6 +1,6 @@
 # 3. Status
 
-**Last updated:** 2026-10-06 · **Phase:** foundation — shared core under team review
+**Last updated:** 2026-10-10 · **Phase:** foundation — contract v0.1 under team review
 
 > Update this file in the same PR that changes a task's state. Status values: `Done`, `In review`, `In progress`, `Blocked`, `Not started`.
 
@@ -8,11 +8,11 @@
 
 | Track | Owner | Done | In progress | Next up |
 |---|---|---|---|---|
-| Shared core + Problems 1, 6 | Bhoomi | Types, kernel, audit core | B1 contract review | B2 agent hook |
+| Shared core + Problems 1, 6 | Bhoomi | Types, kernel, audit core, contract v0.1 | B1 contract review, B2 MCP proxy | B5 demo agent |
 | Problems 2, 5 | Vibhas | — | — | V1 source labeler |
 | Problems 3, 4 | Sahil | — | — | S1 tool manifest |
 
-**Tests:** 22 passing (`tests/test_model.py`, `tests/test_audit.py`, `tests/test_kernel.py`).
+**Tests:** 25 passing (`tests/test_model.py`, `tests/test_audit.py`, `tests/test_kernel.py`).
 
 ## Task board
 
@@ -23,10 +23,11 @@
 | B0a | Shared types (`model.py`) | Done | `main` · `ec745d7` |
 | B0b | Audit log: hash chain, signed checkpoints, `verify()` | Done | `main` · `ec745d7` |
 | B0c | Policy kernel + plug-in interfaces (`kernel.py`) | In review | `foundation` · `b89933f` |
-| B0d | Knowledge base (`docs/`) | In review | `foundation` |
+| B0d | Knowledge base (`docs/`) | In review | `foundation` · `1539516` |
+| B0e | Contract v0.1 additions (D15–D19): `USER_INPUT`, `TOOL_DESCRIPTION`, labelers get the session, `current_turn()`, payload shapes, `from_dict` + `read_entries` | In review | `foundation` |
 | B1 | Team review of the shared contract; freeze v0.1 | In progress | `foundation` PR |
-| B2 | Agent hook (MCP proxy or LangGraph adapter) | Not started — waiting on O1 | |
-| B3 | Problem 1: classifier as an advisory policy | Not started — needs O5 | |
+| B2 | MCP proxy (D14) | In progress | `bhoomi/mcp-proxy` |
+| B3 | Problem 1: classifier as an advisory policy | Not started — needs an adapter that emits `USER_INPUT` | |
 | B4 | Checkpoint export + replay CLI | Not started | |
 | B5 | Demo agent | Not started | |
 
@@ -36,8 +37,8 @@
 |---|---|---|---|
 | V1 | Source-config labeler | Not started | |
 | V2 | Session combination policy | Not started | |
-| V3 | MCP tool-description labeler | Not started — needs O10 | |
-| V4 | Argument matching | Not started — needs O8 | |
+| V3 | MCP tool-description labeler | Not started | |
+| V4 | Argument matching (labels on outbound calls) | Not started | |
 
 ### Sahil — Problems 3 + 4 · [track](tracks/sahil-tools-egress.md)
 
@@ -45,8 +46,8 @@
 |---|---|---|---|
 | S1 | Tool capability manifest policy | Not started | |
 | S2 | SQL classification with `sqlglot` | Not started | |
-| S3 | Circuit breaker | Not started — "per turn" needs O9 | |
-| S4 | Egress policy | Not started — best after V1, V4 | |
+| S3 | Circuit breaker | Not started | |
+| S4 | Egress policy | Not started — best after V4 | |
 
 ## Milestone M1 — flagship demo
 
@@ -66,9 +67,8 @@ From M1 on, measure latency (p50/p99) and false-positive rate against AgentDojo 
 
 | What | Blocks | Who |
 |---|---|---|
-| Vibhas + Sahil review the `foundation` PR | B1, and therefore everyone's first merge | Vibhas, Sahil |
-| Decide first form factor (O1) | B2, B5, M1 | Bhoomi, with the team |
-| Contract additions O5, O8, O9, O10 | B3, V4, S3, V3 | Raise in the `foundation` PR review |
+| Vibhas + Sahil review the `foundation` PR (contract v0.1) | B1, and therefore everyone's first merge | Vibhas, Sahil |
+| Shared internal-destinations config (O11) | V2, S4 | Vibhas + Sahil |
 
 ## Done log
 
@@ -76,7 +76,8 @@ Newest first. One line per merged PR or significant commit.
 
 | Date | What | Who | Ref |
 |---|---|---|---|
-| 2026-10-06 | Knowledge base | Bhoomi | `foundation` |
+| 2026-10-10 | Contract v0.1 additions; decisions D14–D19 | Bhoomi | `foundation` |
+| 2026-10-06 | Knowledge base | Bhoomi | `1539516` |
 | 2026-10-03 | Policy kernel, plug-in interfaces, team plan | Bhoomi | `b89933f` |
 | 2026-10-02 | Shared types, audit log, six problems | Bhoomi | `ec745d7` |
 | — | Initial commit: research documents | Bhoomi | `fe6c797` |

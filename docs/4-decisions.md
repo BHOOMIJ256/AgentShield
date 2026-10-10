@@ -56,19 +56,48 @@ Append-only. To reverse a decision, add a new entry that says which one it super
 **Why:** Three people building against one shared contract; a silent change to it breaks the other two.
 **Means:** See [Contributing](5-contributing.md).
 
+### D14 · 2026-10-10 · The first agent hook is an MCP proxy (closes O1)
+**Why:** A proxy between the agent and its MCP servers works on agents whose code nobody controls (Claude Code, Cursor), can be mandated by a security team without changing agent code, and sees every tool call, result and tool description — enough for the flagship scenario.
+**Means:** B2 builds `adapters/mcp_proxy`. The LangGraph adapter comes second, on the same core.
+
+### D15 · 2026-10-10 · Add `EventKind.USER_INPUT` (closes O5)
+**Why:** Problem 1 needs an event to run the input classifier on, and turn boundaries need a marker.
+**Means:** Adapters that can see the user's message emit `USER_INPUT` with `{"text": ...}`.
+
+### D16 · 2026-10-10 · A turn starts at the latest `USER_INPUT` (closes O9)
+**Why:** The simplest boundary every adapter that sees user input can produce.
+**Means:** `Session.current_turn()`. With no user input seen (e.g. behind an MCP proxy), it returns the whole session.
+
+### D17 · 2026-10-10 · Labelers receive the session: `label(event, session)` (closes O8)
+**Why:** Argument matching (V4) needs to compare a tool call's arguments with earlier untrusted results. Passing the session keeps all tagging in labelers, and the change is free now because no labeler exists yet.
+**Means:** Labelers see the session as it was before the current event, same as policies. Labelers must stay stateless like policies.
+
+### D18 · 2026-10-10 · Tool descriptions are events: `EventKind.TOOL_DESCRIPTION` (closes O10)
+**Why:** A tool description is content the agent reads and trusts; a poisoned description is Problem 2. As events, they get labeled and recorded like everything else, and a policy can compare them against a pinned version (component #10).
+**Means:** The MCP proxy emits one `TOOL_DESCRIPTION` per tool from each `tools/list` response, with `{"server", "description", "input_schema"}`.
+
+### D19 · 2026-10-10 · Fixed payload shape per event kind (closes O12)
+**Why:** Policies must read events the same way no matter which adapter produced them.
+**Means:** The table in [Architecture](2-architecture.md#data-model--srcagentshieldmodelpy). `TOOL_CALL` payload is the tool's arguments verbatim; which argument holds a SQL query, recipient or URL is per-tool config inside each policy.
+
 ## Open questions
 
 | ID | Question | Owner | Blocks | Recommendation |
 |---|---|---|---|---|
-| O1 | First form factor: MCP proxy or LangGraph adapter? | Bhoomi + team | B2, B5, M1 | MCP proxy first: it works on agents whose code we don't control (Claude Code, Cursor) and sees everything crossing the tool boundary. LangGraph adapter second. |
 | O2 | Which vertical for design partners: coding agents or finance-ops? | Team | Go-to-market | Pick one; find 2–3 partners |
 | O3 | Does a *blocked* external action count toward the session tally? | Vibhas | V2 | — |
 | O4 | Per-policy shadow/enforce, so one policy can be enforced while others stay in shadow? | Bhoomi | Moving partners from shadow to enforce | Yes, after M1 |
-| O5 | Add `EventKind.USER_INPUT` for Problem 1? | Bhoomi | B3, S3 | Yes — contract change, all three review |
 | O6 | Where are signed checkpoints stored, and how often are they made? | Bhoomi | B4 | Separate directory/bucket the agent host can't write; every N entries and on session end |
 | O7 | Confirm the kill criterion: no partner moves a policy to enforce within six months → pivot | Team | — | Keep |
-| O8 | Should `Labeler.label` receive the session? | Vibhas + Bhoomi | V4 | Or write argument matching as a policy instead — decide when V4 starts |
-| O9 | How do we know where a "turn" starts? | Sahil + Bhoomi | S3 per-turn limit | Count calls since the last `USER_INPUT` event (needs O5) |
-| O10 | How do MCP tool listings (tool descriptions) appear as events? | Vibhas + Bhoomi | V3 | Decide with B2 |
 | O11 | One shared config for "internal destinations", used by both V2 and S4? | Vibhas + Sahil | V2, S4 | Yes — define it once |
-| O12 | How does a policy know which tool argument holds the SQL query, recipient or URL? | Sahil + Bhoomi | S2, S4 | Per-tool config mapping tool name → argument name |
+
+### Closed
+
+| ID | Question | Closed by |
+|---|---|---|
+| O1 | First form factor | D14 — MCP proxy first |
+| O5 | Event kind for user input | D15 — `USER_INPUT` |
+| O8 | Should labelers receive the session? | D17 — yes |
+| O9 | Where does a turn start? | D16 — latest `USER_INPUT` |
+| O10 | How do tool descriptions appear as events? | D18 — `TOOL_DESCRIPTION` |
+| O12 | Which tool argument holds the query or recipient? | D19 — per-tool config in each policy |

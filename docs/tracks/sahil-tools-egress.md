@@ -14,8 +14,8 @@ Check every tool call **before it fires**. Problem 3 stops the agent doing thing
 |---|---|---|---|
 | **S1** | **Tool capability manifest policy** — per agent, per tool: what is allowed | A call outside the manifest votes `BLOCK` | Contract only |
 | **S2** | **SQL classification with `sqlglot`** | `SELECT` passes; `DROP` / `DELETE` / `UPDATE` follow the manifest; **multi-statement and unparseable SQL vote `BLOCK`** | Contract only |
-| S3 | Circuit breaker | Too many calls per session (and per turn, once O9 is decided) votes `TERMINATE`; counts come from `session.history` | O9 for per-turn |
-| S4 | Egress policy | Data labeled `CONFIDENTIAL` / `SECRET`, or matching a PII pattern, going to a non-allowlisted destination is stopped — **even when no PII pattern matches** | V1, V4 helper, O11 |
+| S3 | Circuit breaker | Too many calls per session, or per turn (`session.current_turn()`), votes `TERMINATE` | Contract only |
+| S4 | Egress policy | Data labeled `CONFIDENTIAL` / `SECRET`, or matching a PII pattern, going to a non-allowlisted destination is stopped — **even when no PII pattern matches** | V4 labels on the call, O11 |
 
 S1 and S2 make the `DROP TABLE` half of milestone M1.
 
@@ -54,20 +54,20 @@ class ToolManifestPolicy:
 - Add `sqlglot` as an **optional extra** (`[sql]`) and import it inside `tools.py` only. The core package stays dependency-free.
 - Classify by walking the parsed tree, not by checking the first keyword — a `WITH … DELETE` hides the delete inside a CTE.
 - **Decision D7:** parse error, more than one statement, or a statement type you don't recognize (`EXEC`, `CALL`, vendor commands) → `BLOCK`.
-- Which argument holds the query is per-tool config (O12) — don't hard-code `payload["query"]`.
+- A `TOOL_CALL` payload is the tool's arguments exactly as the agent sent them (D19). Which argument holds the query is per-tool config in your policy, e.g. `{"run_sql": "query"}` — don't hard-code `payload["query"]`.
 - Map statements to operations — `READ`, `INSERT`, `UPDATE`, `DELETE`, `DDL` — and check them against the manifest from S1.
 
 ## Notes for S3 — circuit breaker
 
 - Count `TOOL_CALL` events in `session.history`. Don't keep a counter in the policy (rule 3 — replay must give the same answer).
-- "Per turn" needs a turn boundary that doesn't exist yet (O9). Ship the per-session limit first.
+- Per turn: count `TOOL_CALL`s in `session.current_turn()` (D16). Behind the MCP proxy there is no `USER_INPUT`, so a turn is the whole session — make the per-session limit the one that always applies.
 
 ## Notes for S4 — egress
 
 Three checks, any one triggers:
 
-1. **Destination:** extract the recipient or URL from the payload (per-tool config, O12); compare against the shared internal-destinations config (O11).
-2. **Labels:** has this session seen `CONFIDENTIAL` / `SECRET` content, *and* does the payload contain text from it? The "contains text from" part is Vibhas's V4 matching helper — use it, don't build a second one.
+1. **Destination:** extract the recipient or URL from the payload (per-tool config, D19); compare against the shared internal-destinations config (O11).
+2. **Labels:** does the outbound `TOOL_CALL` itself carry a `CONFIDENTIAL` / `SECRET` label? Vibhas's V4 labeler puts those on a call whose arguments contain text from a sensitive result — so you only read `event.labels`, no text matching of your own.
 3. **Patterns:** Presidio for PII, plus simple patterns for secrets (`sk_live_…`, `AKIA…`). Presidio is heavy — optional extra `[egress]`.
 
 The label check is what makes this better than old-style DLP: `"Band L5: 42L"` matches no pattern but came from the salary table.
@@ -84,8 +84,8 @@ The label check is what makes this better than old-style DLP: `"Band L5: 42L"` m
 
 | With | About |
 |---|---|
-| Vibhas | **O11** — one shared internal-destinations config. **V4 helper** — S4's label check depends on it. Until then, test with hand-written labels and a stub. |
-| Bhoomi | **O12** — how the adapter passes tool arguments (per-tool argument names). **O9** — turn boundaries. |
+| Vibhas | **O11** — one shared internal-destinations config. **V4 labels** — S4's label check reads the labels V4 puts on outbound calls. Until V4 exists, build `TOOL_CALL` events with hand-written labels in your tests. |
+| Bhoomi | The MCP proxy (B2) produces the real `TOOL_CALL` events your policies see; their payload is the tool's arguments verbatim (D19). |
 
 ## Pitfalls
 

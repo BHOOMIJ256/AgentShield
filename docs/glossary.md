@@ -35,5 +35,7 @@
 | **Shadow mode** | Policies run and decisions are recorded, but nothing is blocked. How every deployment starts. |
 | **Shield** | The kernel object: `Shield.check(event)` runs labelers, policies, combine, session and audit. |
 | **Taint** | Untrusted origin spreading to what it touches. Session-level taint: once untrusted content is in context, later outputs are treated as untrusted too. |
+| **Tool description** | The text and input schema an MCP server publishes for each tool. The agent reads and trusts it, so a changed or poisoned description is Problem 2. Arrives as a `TOOL_DESCRIPTION` event. |
+| **Turn** | One user message and everything the agent does in response. Starts at the latest `USER_INPUT` event; see `Session.current_turn()`. |
 | **Trifecta / lethal trifecta** | Untrusted input + sensitive data + external action in one session. Any two are fine; all three is the attack. Problem 5. |
 | **Trust** | How much authority content has, set by origin: `TRUSTED`, `USER`, `UNTRUSTED`. |

@@ -67,7 +67,7 @@ def test_crashing_policy_fails_closed():
 
 def test_crashing_labeler_marks_content_untrusted():
     class BadLabeler:
-        def label(self, event):
+        def label(self, event, session):
             raise ValueError
 
     shield = Shield(labelers=[BadLabeler()])
@@ -87,11 +87,37 @@ def test_sessions_are_kept_apart():
     assert shield.session("s1").history == []
 
 
+def test_labeler_sees_earlier_events_but_not_the_current_one():
+    seen = []
+
+    class Spy:
+        def label(self, event, session):
+            seen.append([e.name for e in session.events])
+            return ()
+
+    shield = Shield(labelers=[Spy()])
+    shield.check(_event(name="first"))
+    shield.check(_event(name="second"))
+    assert seen == [[], ["first"]]
+
+
+def test_current_turn_starts_at_latest_user_input():
+    shield = Shield()
+    shield.check(_event(name="before"))
+    assert [e.name for e in shield.session("s1").current_turn()] == ["before"]
+
+    shield.check(_event(EventKind.USER_INPUT, "user", text="hi"))
+    shield.check(_event(name="a"))
+    shield.check(_event(EventKind.USER_INPUT, "user", text="again"))
+    shield.check(_event(name="b"))
+    assert [e.name for e in shield.session("s1").current_turn()] == ["user", "b"]
+
+
 # --- Contract check: the interfaces are enough for each owner's problem. ---
 # These toy versions only prove the plumbing; the real implementations live in each owner's module.
 
 class ToyResumeLabeler:  # Problem 2 shape
-    def label(self, event):
+    def label(self, event, session):
         if event.kind is EventKind.TOOL_RESULT and event.name == "read_resume":
             yield Label("tool:read_resume", Trust.UNTRUSTED)
         if event.kind is EventKind.TOOL_RESULT and event.name == "read_salaries":

@@ -25,11 +25,15 @@ class Sensitivity(str, Enum):
 
 
 class EventKind(str, Enum):
-    TOOL_CALL = "tool_call"
-    TOOL_RESULT = "tool_result"
-    MEMORY_READ = "memory_read"
-    MEMORY_WRITE = "memory_write"
-    AGENT_MESSAGE = "agent_message"
+    """What happened. `Event.name` and `Event.payload` follow the convention noted on each kind."""
+
+    USER_INPUT = "user_input"  # name: "user"; payload: {"text": str}. Starts a new turn.
+    TOOL_DESCRIPTION = "tool_description"  # name: tool; payload: {"server", "description", "input_schema"}
+    TOOL_CALL = "tool_call"  # name: tool; payload: the tool's arguments exactly as the agent sent them
+    TOOL_RESULT = "tool_result"  # name: tool; payload: {"content": ..., "is_error": bool}
+    MEMORY_READ = "memory_read"  # name: memory key; payload: {"value": ...}
+    MEMORY_WRITE = "memory_write"  # name: memory key; payload: {"value": ...}
+    AGENT_MESSAGE = "agent_message"  # name: receiving agent; payload: {"content": ...}
 
 
 class Action(str, Enum):
@@ -53,6 +57,10 @@ class Label:
     trust: Trust
     sensitivity: Sensitivity = Sensitivity.INTERNAL
 
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> Label:
+        return cls(data["origin"], Trust(data["trust"]), Sensitivity(data["sensitivity"]))
+
 
 @dataclass(frozen=True)
 class Event:
@@ -61,11 +69,25 @@ class Event:
     kind: EventKind
     session_id: str
     agent_id: str
-    name: str  # tool name, memory key, or target agent
+    name: str  # see EventKind for what name and payload hold per kind
     payload: Mapping[str, Any] = field(default_factory=dict)
     labels: tuple[Label, ...] = ()
     event_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     timestamp: float = field(default_factory=time.time)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> Event:
+        """Rebuild an event recorded in the audit log, e.g. for replay."""
+        return cls(
+            kind=EventKind(data["kind"]),
+            session_id=data["session_id"],
+            agent_id=data["agent_id"],
+            name=data["name"],
+            payload=dict(data["payload"]),
+            labels=tuple(Label.from_dict(label) for label in data["labels"]),
+            event_id=data["event_id"],
+            timestamp=data["timestamp"],
+        )
 
 
 @dataclass(frozen=True)
@@ -81,3 +103,7 @@ class Decision:
     def enforced_action(self) -> Action:
         """What actually happens. In shadow mode everything proceeds; `action` keeps what would have."""
         return self.action if self.mode is Mode.ENFORCE else Action.ALLOW
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> Decision:
+        return cls(Action(data["action"]), Mode(data["mode"]), tuple(data["reasons"]), data["policy_id"])

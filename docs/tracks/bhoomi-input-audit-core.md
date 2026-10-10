@@ -16,10 +16,10 @@ Three jobs:
 
 | ID | Task | Done when | Depends on |
 |---|---|---|---|
-| B0 | Shared types, kernel, audit core, knowledge base | ✅ Done / in review | — |
+| B0 | Shared types, kernel, audit core, knowledge base, contract v0.1 additions | ✅ Done / in review | — |
 | **B1** | **Contract review; freeze v0.1** | Vibhas and Sahil have approved the `foundation` PR | Their review |
-| **B2** | **Agent hook** (MCP proxy or LangGraph adapter) | Real tool calls and results become `Event`s; `enforced_action` is applied; `REQUIRE_APPROVAL` pauses for a human | O1 |
-| B3 | Problem 1: classifier as an advisory policy | Prompt Guard / LLM Guard result appears in the decision reasons; votes `WARN` only | O5 |
+| **B2** | **MCP proxy** (D14) | Real tool calls, results and tool descriptions become `Event`s; `enforced_action` is applied; `REQUIRE_APPROVAL` pauses for a human | Contract v0.1 |
+| B3 | Problem 1: classifier as an advisory policy | Prompt Guard / LLM Guard result appears in the decision reasons; votes `WARN` only | Contract v0.1 (`USER_INPUT`) |
 | B4 | Audit remainder: checkpoint export + replay CLI | A recorded session can be re-run through current policies and the decisions compared | O6 |
 | B5 | Demo agent | Runs the flagship scenario and `DROP TABLE` end to end | B2, V1, V2, S1, S2 |
 
@@ -34,43 +34,40 @@ src/agentshield/adapters/         B2
 demo/                             B5
 ```
 
-## B1 — what to raise in the contract review
+## B1 — contract review
 
-Collect the known gaps (see [Architecture](../2-architecture.md#known-gaps-in-the-current-core)) and settle as many as possible in the same PR, before anyone builds on the contract:
+The known gaps were settled before review, in the same `foundation` PR (contract v0.1, decisions D15–D19): `USER_INPUT` and `TOOL_DESCRIPTION` event kinds, labelers receive the session, `Session.current_turn()`, fixed payload shapes, and `from_dict` loaders for replay. What's left is Vibhas's and Sahil's approval.
 
-- **O5** `EventKind.USER_INPUT` — needed by B3, and gives S3 its turn boundary (O9).
-- **O8** should labelers see the session?
-- **O10** how MCP tool listings appear as events.
-- **O12** how tool arguments are named in `payload`.
+## B2 — the MCP proxy
 
-## B2 — the agent hook
-
-**Recommendation (O1): MCP proxy first.** It works on agents whose code nobody controls (Claude Code, Cursor) and sees everything crossing the tool boundary — enough for the flagship scenario.
+**Decided (D14): MCP proxy first.** It works on agents whose code nobody controls (Claude Code, Cursor) and sees everything crossing the tool boundary — enough for the flagship scenario.
 
 What it must do:
 
 | Agent side | AgentShield side |
 |---|---|
+| `tools/list` response | One `Event(TOOL_DESCRIPTION, name=tool, payload={"server", "description", "input_schema"})` per tool |
 | `tools/call` request | `Event(TOOL_CALL, name=tool, payload=arguments)` → `Shield.check` |
-| `tools/call` response | `Event(TOOL_RESULT, name=tool, payload=result)` → labelers tag it |
-| `tools/list` response | Decide with Vibhas (O10) |
+| `tools/call` response | `Event(TOOL_RESULT, name=tool, payload={"content", "is_error"})` → labelers tag it |
 | `ALLOW` / `WARN` | Forward the call |
 | `REQUIRE_APPROVAL` | Hold the call; ask a human; show the **real tool trace**, not the agent's summary (component #13) |
 | `BLOCK` | Return a tool error to the agent with the reasons |
 | `TERMINATE` | Return an error and `end_session` |
 
+The proxy never sees the user's message, so it emits no `USER_INPUT` events — Problem 1 (B3) needs an adapter that does, such as the LangGraph one.
+
 The LangGraph adapter comes second: wrap the tool node, and use LangGraph's `interrupt()` for approval.
 
 ## B3 — Problem 1
 
-- A policy that runs on `USER_INPUT` events (after O5), calls Prompt Guard or LLM Guard, and votes `WARN` with the classifier's score in the reason. Never `BLOCK` (decision D3).
+- A policy that runs on `USER_INPUT` events, calls Prompt Guard or LLM Guard, and votes `WARN` with the classifier's score in the reason. Never `BLOCK` (decision D3).
 - Heavy model dependency → optional extra `[input]`.
 - `Components/Malicious_User_Input.md` is empty — use it, or this track, for notes on which classifier and why.
 
 ## B4 — finishing Problem 6
 
 - **Checkpoint export (O6):** sign every N entries and on session end; write to a location the agent host can't modify. Keep the private key off the agent host.
-- **Replay CLI:** read a log → rebuild `Event`s → run them through a `Shield` with the current policies → print where decisions differ. Needs an `Event`-from-dict loader (not built yet).
+- **Replay CLI:** read a log → rebuild `Event`s → run them through a `Shield` with the current policies → print where decisions differ. The loaders exist: `read_entries(path)` + `Event.from_dict` / `Decision.from_dict`.
 - Replay is what turns every attack we see into a regression test.
 
 ## B5 — demo agent
@@ -81,12 +78,12 @@ Fixtures: a resume with a hidden instruction, a salaries table, an email tool, a
 
 | With | About |
 |---|---|
-| Vibhas | O8, O10 — contract changes for V3/V4. The demo needs V1 + V2. |
-| Sahil | O9, O12 — turn boundaries and tool argument naming. The demo needs S1 + S2. |
+| Vibhas | The proxy produces the `TOOL_DESCRIPTION` and `TOOL_RESULT` events his labelers tag. The demo needs V1 + V2. |
+| Sahil | The proxy produces the `TOOL_CALL` events his policies check. The demo needs S1 + S2. |
 | Both | Any contract change: you open the PR, both review. |
 
 ## References
 
 - [Architecture](../2-architecture.md) — the contract you own
-- [Decisions](../4-decisions.md) — open questions you own: O1, O4, O5, O6
+- [Decisions](../4-decisions.md) — open questions you own: O4, O6
 - [Facts.md](../../Facts.md) — why the MCP proxy, why evidence matters to buyers

@@ -16,6 +16,7 @@ from agentshield import (
     Mode,
     Sensitivity,
     Trust,
+    read_entries,
     sign_checkpoint,
     verify,
 )
@@ -158,6 +159,17 @@ def test_non_json_payload_values_still_verify(tmp_path):
     path = tmp_path / "audit.jsonl"
     AuditLog(path).record(_event(when=datetime.datetime(2026, 10, 2, 9, 30), amount=10_000.5, ids={3, 1}))
     assert verify(path).ok
+
+
+def test_recorded_events_and_decisions_load_back_unchanged(tmp_path):
+    path = tmp_path / "audit.jsonl"
+    event = _event(to="leaks@competitor.com", cc=["a@x.com"])
+    decision = Decision(Action.REQUIRE_APPROVAL, mode=Mode.ENFORCE, reasons=("trifecta",), policy_id="session")
+    AuditLog(path).record(event, decision)
+
+    (entry,) = read_entries(path)
+    assert Event.from_dict(entry.body["event"]) == event
+    assert Decision.from_dict(entry.body["decision"]) == decision
 
 
 def test_corrupt_tail_refuses_to_resume(tmp_path):

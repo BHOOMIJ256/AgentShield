@@ -16,8 +16,8 @@ You never judge what text *says*. You record where it *came from*, and write rul
 |---|---|---|---|
 | **V1** | **Source-config labeler** — config maps each source to `Trust` + `Sensitivity` | Every `TOOL_RESULT`, `MEMORY_READ` and `AGENT_MESSAGE` event carries a label; **unknown sources default to `UNTRUSTED`** | Contract only |
 | **V2** | **Session combination policy** | Untrusted + sensitive + external action in one session → `REQUIRE_APPROVAL`; any two of the three → no vote | V1 (or hand-written labels in tests) |
-| V3 | MCP tool-description labeler | Tool descriptions are labeled by the server's trust, so a poisoned description is untrusted content | O10, B2 |
-| V4 | Argument matching | A tool-call argument containing text from an untrusted result is flagged — finer than whole-session tagging | O8 |
+| V3 | MCP tool-description labeler | `TOOL_DESCRIPTION` events are labeled by the server's trust, so a poisoned description is untrusted content | B2 (to see real ones; test with hand-built events now) |
+| V4 | Argument matching | A `TOOL_CALL` whose arguments contain text from an earlier untrusted result gets that result's labels — finer than whole-session tagging | Contract only — labelers receive the session (D17) |
 
 **Do V1 and V2 first** — Sahil's egress check (S4) and the flagship demo (M1) both wait on them.
 
@@ -45,7 +45,7 @@ class SourceLabeler:
     def __init__(self, sources: dict[str, tuple[Trust, Sensitivity]]):
         self.sources = sources
 
-    def label(self, event):
+    def label(self, event, session):
         if event.kind not in LABELED_KINDS:
             return
         trust, sensitivity = self.sources.get(event.name, (Trust.UNTRUSTED, Sensitivity.INTERNAL))
@@ -78,8 +78,8 @@ The kernel test `tests/test_kernel.py::ToyTrifecta` is a working sketch. To make
 
 | With | About |
 |---|---|
-| Sahil | **O11** — one shared "internal destinations" config for V2 and S4. **V4 ↔ S4** — Sahil's egress check needs "does this payload contain text from a confidential result?" That is the same matching as V4; build it once as a shared helper. |
-| Bhoomi | **O8** — does `Labeler.label` need the session for V4? **O10** — how MCP tool listings arrive as events (for V3). Both are contract changes. |
+| Sahil | **O11** — one shared "internal destinations" config for V2 and S4. **V4 → S4** — Sahil's egress check reads the labels V4 puts on the outbound `TOOL_CALL`: if a call to `send_email` carries a `CONFIDENTIAL` label from `db:salaries`, that's how he knows salary text is in the email. Agree the label shape with him early. |
+| Bhoomi | The MCP proxy (B2) is what produces real `TOOL_DESCRIPTION` and `TOOL_RESULT` events. Payload shapes per kind are fixed (D19) — see the table in [Architecture](../2-architecture.md#data-model--srcagentshieldmodelpy). |
 
 ## Pitfalls
 

@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from typing import Iterable, Protocol, Sequence
 
 from .audit import AuditLog
-from .model import Action, Decision, Event, Label, Mode, Trust
+from .model import Action, Decision, Event, EventKind, Label, Mode, Trust
 
 SEVERITY = {
     Action.ALLOW: 0,
@@ -33,9 +33,13 @@ SEVERITY = {
 
 
 class Labeler(Protocol):
-    """Attaches provenance labels to an event as it enters, e.g. tool results from a web fetch."""
+    """Attaches provenance labels to an event as it enters, e.g. tool results from a web fetch.
 
-    def label(self, event: Event) -> Iterable[Label]: ...
+    `session` holds everything before this event, so a labeler can tag a tool call
+    whose arguments repeat text from an earlier untrusted result.
+    """
+
+    def label(self, event: Event, session: Session) -> Iterable[Label]: ...
 
 
 class Policy(Protocol):
@@ -54,6 +58,14 @@ class Session:
     @property
     def events(self) -> list[Event]:
         return [event for event, _ in self.history]
+
+    def current_turn(self) -> list[Event]:
+        """Events from the latest USER_INPUT onward; the whole session if no user input was seen."""
+        events = self.events
+        for i in range(len(events) - 1, -1, -1):
+            if events[i].kind is EventKind.USER_INPUT:
+                return events[i:]
+        return events
 
 
 class Shield:
@@ -82,8 +94,8 @@ class Shield:
         self._sessions.pop(session_id, None)
 
     def check(self, event: Event) -> Decision:
-        event = self._apply_labelers(event)
         session = self.session(event.session_id)
+        event = self._apply_labelers(event, session)
 
         votes: list[tuple[str, Decision]] = []
         for policy in self.policies:
@@ -100,11 +112,11 @@ class Shield:
             self.audit.record(event, decision)
         return decision
 
-    def _apply_labelers(self, event: Event) -> Event:
+    def _apply_labelers(self, event: Event, session: Session) -> Event:
         added: list[Label] = []
         for labeler in self.labelers:
             try:
-                added.extend(labeler.label(event))
+                added.extend(labeler.label(event, session))
             except Exception:
                 added.append(Label(f"labeler-error:{type(labeler).__name__}", Trust.UNTRUSTED))
         if not added:
