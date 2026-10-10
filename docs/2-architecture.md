@@ -139,6 +139,51 @@ One JSON object per line:
 - Values that aren't JSON (datetimes, sets) are stored as strings, so they come back as strings.
 - One writer per file. A half-written last line makes `AuditLog(path)` raise `AuditLogCorrupted` rather than continue a broken chain.
 
+## Adapters — `src/agentshield/adapters/`
+
+An adapter connects the Shield to a real agent. It has three layers, so the second adapter (LangGraph) only has to rewrite the thin top one:
+
+| Module | Job | Depends on |
+|---|---|---|
+| `gate.py` — `ToolGate` | Turns tool listings, calls and results into `Event`s, runs `Shield.check`, applies `enforced_action`, asks a human on `REQUIRE_APPROVAL`, records the human's answer in the audit log | Core + `anyio` |
+| `approval.py` — `Approver`, `FileApprover`, `DenyAll` | Gets a yes/no from a human through a channel the agent can't reach (D20) | `anyio` |
+| `mcp_proxy.py` | MCP server facing the agent, MCP client facing the real server, both over stdio; command `agentshield-mcp-proxy` | `mcp` extra |
+
+How the gate applies a decision:
+
+| Enforced action | Tool call | Tool result | Tool description |
+|---|---|---|---|
+| `ALLOW`, `WARN` | forwarded | returned to the agent | shown |
+| `REQUIRE_APPROVAL` | waits for a human; forwarded only on yes | waits for a human; withheld unless yes | hidden (D21) |
+| `BLOCK` | agent gets a tool error with the reasons | withheld; agent gets an error | hidden; calls to it refused |
+| `TERMINATE` | refused, and every later call in the session too | same | hidden |
+
+Approval requests show the human the **real trace** — every earlier event in the session with its labels — not the agent's own summary (component #13). The answer is appended to the audit log as `{"approval": {"event_id", "approved", "approver"}}`.
+
+### Running the proxy
+
+Register it with the agent in place of the real server:
+
+```bash
+agentshield-mcp-proxy --agent-id hr-agent --server-name hr \
+    --mode shadow --audit audit.jsonl --approvals approvals/ \
+    --setup myshield:build \
+    -- python hr_server.py
+```
+
+- `--setup module:function` — the function returns `(policies, labelers)`. Without it the proxy only records.
+- `--approvals DIR` — where approval requests are written. Without it, anything needing approval is refused.
+- A human answers from another terminal:
+
+```bash
+agentshield-approve --dir approvals/ list
+agentshield-approve --dir approvals/ show <id>
+agentshield-approve --dir approvals/ approve <id>
+```
+
+- No answer within `--approval-timeout` seconds (default 300) means no. The agent's MCP client must allow tool calls that long.
+- Every `tools/list` is fetched fresh from the real server and every description re-checked, so a description changed after install is caught on the next listing.
+
 ## Code layout
 
 ```
@@ -152,9 +197,13 @@ src/agentshield/
     tools.py          tool manifest, SQL, circuit breaker   Sahil    (planned)
     egress.py         outbound data check                   Sahil    (planned)
   input/              Problem 1 classifier policy           Bhoomi   (planned)
-  adapters/           MCP proxy / LangGraph adapter         Bhoomi   (planned)
+  adapters/
+    gate.py           ToolGate: events in, decisions applied Bhoomi
+    approval.py       human approval, agentshield-approve   Bhoomi
+    mcp_proxy.py      agentshield-mcp-proxy                 Bhoomi
 demo/                 flagship demo agent                   Bhoomi   (planned)
 tests/                one test file per module
+  fixtures/           hr_server.py (test MCP server), toy_shield.py (toy policies — tests only)
 ```
 
 The layout is designed so that the three of us rarely edit the same file.

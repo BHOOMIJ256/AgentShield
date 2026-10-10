@@ -4,7 +4,7 @@
 
 AgentShield tracks where every piece of an agent's context came from, stops untrusted content from combining with sensitive data into an external action, and keeps a record your compliance team can verify.
 
-> **Status:** early development. The shared core (types, policy kernel, audit log) is built; the security policies are being built by three parallel tracks. See [docs/3-status.md](docs/3-status.md).
+> **Status:** early development. The shared core (types, policy kernel, audit log) and an MCP proxy are built; the security policies are being built by three parallel tracks. See [docs/3-status.md](docs/3-status.md).
 
 ## Quickstart
 
@@ -24,6 +24,16 @@ decision.enforced_action   # what to do with the call
 ```
 
 Policies and labelers plug into `Shield`; see [Architecture](docs/2-architecture.md#writing-a-policy) for how to write one.
+
+### Put an MCP server behind AgentShield
+
+Register the proxy with your agent in place of the real server:
+
+```bash
+agentshield-mcp-proxy --agent-id hr-agent --server-name hr --audit audit.jsonl --approvals approvals/ -- python hr_server.py
+```
+
+It starts in shadow mode: nothing is blocked, everything is recorded. Approve or deny paused actions from another terminal with `agentshield-approve --dir approvals/ list`. Details: [Architecture → Adapters](docs/2-architecture.md#adapters--srcagentshieldadapters).
 
 ## Documentation
 

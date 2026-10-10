@@ -8,11 +8,11 @@
 
 | Track | Owner | Done | In progress | Next up |
 |---|---|---|---|---|
-| Shared core + Problems 1, 6 | Bhoomi | Types, kernel, audit core, contract v0.1 | B1 contract review, B2 MCP proxy | B5 demo agent |
+| Shared core + Problems 1, 6 | Bhoomi | Types, kernel, audit core, contract v0.1, MCP proxy (in review) | B1 contract review | B5 demo agent |
 | Problems 2, 5 | Vibhas | — | — | V1 source labeler |
 | Problems 3, 4 | Sahil | — | — | S1 tool manifest |
 
-**Tests:** 25 passing (`tests/test_model.py`, `tests/test_audit.py`, `tests/test_kernel.py`).
+**Tests:** 44 passing (`test_model`, `test_audit`, `test_kernel`, `test_gate`, `test_mcp_proxy`).
 
 ## Task board
 
@@ -26,7 +26,7 @@
 | B0d | Knowledge base (`docs/`) | In review | `foundation` · `1539516` |
 | B0e | Contract v0.1 additions (D15–D19): `USER_INPUT`, `TOOL_DESCRIPTION`, labelers get the session, `current_turn()`, payload shapes, `from_dict` + `read_entries` | In review | `foundation` |
 | B1 | Team review of the shared contract; freeze v0.1 | In progress | `foundation` PR |
-| B2 | MCP proxy (D14) | In progress | `bhoomi/mcp-proxy` |
+| B2 | MCP proxy (D14): `ToolGate`, out-of-band approvals (D20), `agentshield-mcp-proxy`, `agentshield-approve` | In review | `bhoomi/mcp-proxy` |
 | B3 | Problem 1: classifier as an advisory policy | Not started — needs an adapter that emits `USER_INPUT` | |
 | B4 | Checkpoint export + replay CLI | Not started | |
 | B5 | Demo agent | Not started | |
@@ -58,7 +58,7 @@ A real agent reads a malicious resume, reads salaries, and tries to email an out
 | The external email pauses for human approval | V1, V2, B2 | |
 | An internal email goes through | V2 | |
 | `DROP TABLE` is blocked | S1, S2, B2 | |
-| The agent runs end to end through the hook | B2, B5 | |
+| The agent runs end to end through the hook | B2, B5 | Hook works with toy policies (`tests/test_mcp_proxy.py`); demo agent B5 not started |
 | `verify()` passes on the audit log | B0b ✅ | Done |
 
 From M1 on, measure latency (p50/p99) and false-positive rate against AgentDojo plus our own attack cases.
@@ -76,7 +76,8 @@ Newest first. One line per merged PR or significant commit.
 
 | Date | What | Who | Ref |
 |---|---|---|---|
-| 2026-10-10 | Contract v0.1 additions; decisions D14–D19 | Bhoomi | `foundation` |
+| 2026-10-10 | MCP proxy, approval channel; decisions D20–D21 | Bhoomi | `bhoomi/mcp-proxy` |
+| 2026-10-10 | Contract v0.1 additions; decisions D14–D19 | Bhoomi | `e65cb01` |
 | 2026-10-06 | Knowledge base | Bhoomi | `1539516` |
 | 2026-10-03 | Policy kernel, plug-in interfaces, team plan | Bhoomi | `b89933f` |
 | 2026-10-02 | Shared types, audit log, six problems | Bhoomi | `ec745d7` |
