@@ -22,7 +22,7 @@ import os
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Iterator
 
 from .model import Decision, Event
 
@@ -110,6 +110,15 @@ class AuditLog:
             body["decision"] = dataclasses.asdict(decision)
             body["enforced_action"] = decision.enforced_action
         return self.append(body)
+
+
+def read_entries(path: str | os.PathLike[str]) -> Iterator[AuditEntry]:
+    """Yield entries in order without checking the chain — call `verify()` first if that matters."""
+    with Path(path).open("r", encoding="utf-8") as f:
+        for line in f:
+            if line.strip():
+                entry = json.loads(line)
+                yield AuditEntry(entry["seq"], entry["prev"], entry["hash"], entry["body"])
 
 
 @dataclass(frozen=True)
